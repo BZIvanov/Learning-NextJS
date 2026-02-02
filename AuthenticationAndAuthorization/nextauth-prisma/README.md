@@ -2,6 +2,8 @@
 
 Example on how to sign in using Credentials, Github and Google.
 
+Example is with incomplete code, only the esentials. This is to avoid storing default unchanged files. To run the demo just drop the files in a newly created project.
+
 ## How to use?
 
 1. Run `npm install` to install the dependencies.
