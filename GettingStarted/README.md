@@ -90,3 +90,239 @@ React:
 - Attaches event handlers instead of replacing DOM nodes
 
 If everything matches → hydration is fast and invisible.
+
+## React Server Components (RSC)
+
+React Server Components are components that:
+
+- Run **only on the server**
+- Never ship their JavaScript to the browser
+- Can directly access backend resources (DBs, secrets, filesystem)
+- Render into a special serialized format that React can understand
+
+They let you build React UIs where **most components never become client-side JS at all.**
+
+In Next.js App Router, **every component is a Server Component by default.**
+
+### The problem RSCs solve
+
+Before RSCs, even with SSR:
+
+- The server rendered HTML
+- But the **same components still had to run again in the browser**
+- Meaning:
+  - Large JS bundles
+  - Duplicate work
+  - Slow hydration
+  - Client JS doing backend-shaped work
+
+RSCs break this assumption.
+
+> "Not everything needs to be interactive."
+
+### Server Components vs Client Components
+
+#### Server Components (default)
+
+✅ Run on the server
+✅ Can access databases, APIs, secrets
+✅ Zero JS sent to browser
+❌ No state
+❌ No effects
+❌ No event handlers
+
+```tsx
+// Server Component
+export default async function UserProfile() {
+  const user = await db.user.findFirst();
+
+  return <h1>Hello {user.name}</h1>;
+}
+```
+
+#### Client Components ('use client')
+
+✅ Run in the browser
+✅ Can use hooks (`useState`, `useEffect`)
+✅ Can handle events
+❌ Can’t access server-only resources
+
+```tsx
+"use client";
+
+export function LikeButton() {
+  const [likes, setLikes] = useState(0);
+
+  return <button onClick={() => setLikes(likes + 1)}>❤️ {likes}</button>;
+}
+```
+
+### How Server Components actually work (under the hood)
+
+This part is key.
+
+1. **Server renders RSCs**
+
+React executes Server Components on the server and produces:
+
+- HTML
+- Plus a **React Server Component payload** (not HTML, not JS)
+
+2. **RSC payload is streamed to the browser**
+
+This payload describes:
+
+- Component tree structure
+- Props
+- References to Client Components
+
+3. **Browser reconstructs the tree**
+
+The client:
+
+- Builds the React tree from the RSC payload
+- Downloads JS only for Client Components
+- Hydrates only those client components
+
+**Server Components themselves are never hydrated.**
+
+### Streaming + Suspense is not optional anymore
+
+Server Components pair naturally with `Suspense`.
+
+```tsx
+<Suspense fallback={<Loading />}>
+  <ProductList />
+</Suspense>
+```
+
+What happens:
+
+- HTML streams immediately
+- Slow data fetches don’t block the whole page
+- Hydration happens progressively
+
+This is how Next.js achieves **time-to-first-byte improvements** without waterfalls.
+
+### Data fetching in RSCs (the “aha” moment)
+
+With RSCs, data fetching becomes _part of rendering_.
+
+```tsx
+async function Posts() {
+  const posts = await fetch("https://api.example.com/posts").then((res) =>
+    res.json(),
+  );
+  return <PostList posts={posts} />;
+}
+```
+
+No:
+
+- `useEffect`
+- Loading state boilerplate
+- Client waterfalls
+
+React just… waits.
+
+### Caching and revalidation (Next.js specific)
+
+Next.js layers caching on top of RSCs:
+
+```ts
+fetch(url, { cache: "force-cache" });
+fetch(url, { next: { revalidate: 60 } });
+```
+
+This means:
+
+- Server Components can be static
+- Or revalidated
+- Or fully dynamic
+
+And **React doesn't care** — it just renders.
+
+### What Server Components cannot do (important)
+
+You cannot use:
+
+- `useState`
+- `useEffect`
+- `useContext` (client context)
+- Event handlers (`onClick`)
+- Browser APIs (`window`, `document`)
+
+If you need those → `'use client'`.
+
+### The “Client Boundary” concept
+
+When you mark a file with `'use client'`:
+
+- That component
+- And everything it imports becomes part of the client bundle.
+
+So structure matters:
+
+```tsx
+// Good
+<ServerData>
+  <ClientWidget />
+</ServerData>
+```
+
+```tsx
+// Bad
+"use client";
+
+import ServerData from "./ServerData"; // ❌ pulls server logic into client
+```
+
+### RSCs + hydration together
+
+This is the clean separation:
+
+| Phase         | What runs              |
+| ------------- | ---------------------- |
+| Server render | Server Components      |
+| HTML paint    | Browser                |
+| Hydration     | Client Components only |
+| Interaction   | Client Components      |
+
+**Less hydration = faster app.**
+
+### Why RSCs feel weird at first
+
+They violate old React instincts:
+
+- “Components must be universal”
+- “Fetch in effects”
+- “Everything hydrates”
+
+RSCs say:
+
+- Fetch during render
+- Most components never hydrate
+- JS is opt-in
+
+Once it clicks, apps get simpler and faster.
+
+### When NOT to use Server Components
+
+Avoid them for:
+
+- Highly interactive widgets
+- Client-only state machines
+- Drag-and-drop
+- Animations tied to scroll or input
+
+Use them for:
+
+- Layout
+- Data fetching
+- Content
+- Auth-gated pages
+- Anything mostly static
+
+### One-sentence summary
+
+> React Server Components let you render most of your app on the server, ship almost no JavaScript, and hydrate only what actually needs to be interactive.
