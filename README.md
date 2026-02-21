@@ -3,4 +3,5 @@
 ## Content
 
 - **GettingStarted**
+- **ServerComponents**
 - **AuthenticationAndAuthorization**
